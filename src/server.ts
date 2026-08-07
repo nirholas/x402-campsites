@@ -13,6 +13,7 @@ import express from "express";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildRails, describeRails, paywall, type RoutePrices } from "./payments.js";
+import { ROUTE_SCHEMAS } from "./schemas.js";
 import { UpstreamError, ridbEnabled } from "./ridb.js";
 import { fixtureCampgrounds } from "./fixtures.js";
 import {
@@ -29,17 +30,26 @@ const rails = buildRails();
 
 const PRICES = { search: "$0.002", availability: "$0.003" } as const;
 
+/**
+ * Every paid route publishes its request and response schema inside the 402
+ * challenge, so an agent that has never seen this API can read one 402 and know
+ * how to call the route and what it will get back. `ROUTE_SCHEMAS` is generated
+ * from `public/openapi.json` (`npm run schemas`), which is what keeps the
+ * challenge and the published OpenAPI document from drifting apart.
+ */
 const routePrices: RoutePrices = {
   "GET /search": {
     price: PRICES.search,
     description: "Campground search — location, agency, site count, amenities, and booking link",
     mimeType: "application/json",
+    outputSchema: ROUTE_SCHEMAS["GET /search"],
   },
   "GET /availability/:campgroundId": {
     price: PRICES.availability,
     description:
       "Site-level availability for a campground over a date window, plus a summary of what is bookable",
     mimeType: "application/json",
+    outputSchema: ROUTE_SCHEMAS["GET /availability/:campgroundId"],
   },
 };
 
