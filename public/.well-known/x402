@@ -1,0 +1,449 @@
+{
+  "x402Version": 1,
+  "name": "x402-campsites",
+  "description": "Campground search and availability from the official Recreation.gov RIDB API, per-lookup pricing",
+  "homepage": "https://nirholas.github.io/x402-campsites/",
+  "repository": "https://github.com/nirholas/x402-campsites",
+  "contact": "nichxbt@gmail.com",
+  "skill": "/skill.md",
+  "dataSource": {
+    "search": {
+      "upstream": "Recreation Information Database (RIDB)",
+      "keyed": true,
+      "envVars": [
+        "RIDB_API_KEY"
+      ],
+      "fallback": "Deterministic fixture catalog when the key is unset, labelled source:\"fixture\". The fixture entries carry REAL recreation.gov facility ids, so availability lookups on them still return live data."
+    },
+    "availability": {
+      "upstream": "recreation.gov campground availability API",
+      "keyed": false,
+      "fallback": "Called live and keyless. Only if that endpoint is unreachable does the response fall back to a deterministic simulation, and availabilitySource says \"fixture\" when it does."
+    }
+  },
+  "payment": {
+    "protocol": "x402",
+    "asset": "USDC",
+    "note": "Pay in USDC on Base or Solana — your client picks the rail.",
+    "rails": [
+      {
+        "rail": "evm",
+        "network": "base-sepolia",
+        "payTo": "0x40252CFDF8B20Ed757D61ff157719F33Ec332402",
+        "facilitator": "https://x402.org/facilitator"
+      },
+      {
+        "rail": "solana",
+        "network": "solana",
+        "payTo": "WwwuGbqHrwF5RG89KhUbmRWEvjnRH9k5kVM5p7T3WwW",
+        "facilitator": "https://facilitator.payai.network"
+      }
+    ]
+  },
+  "resources": [
+    {
+      "resource": "GET /search",
+      "description": "Campground search — location, agency, site count, amenities, and booking link",
+      "price": "$0.002",
+      "asset": "USDC",
+      "network": "base-sepolia",
+      "networks": [
+        "base-sepolia",
+        "solana"
+      ],
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "base-sepolia",
+          "asset": "USDC",
+          "payTo": "0x40252CFDF8B20Ed757D61ff157719F33Ec332402",
+          "maxAmountRequired": "2000",
+          "mimeType": "application/json"
+        },
+        {
+          "scheme": "exact",
+          "network": "solana",
+          "asset": "USDC",
+          "payTo": "WwwuGbqHrwF5RG89KhUbmRWEvjnRH9k5kVM5p7T3WwW",
+          "maxAmountRequired": "2000",
+          "mimeType": "application/json"
+        }
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Free text, e.g. \"Yosemite\""
+          },
+          "state": {
+            "type": "string",
+            "description": "2-letter state code, e.g. CA"
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "radiusMiles": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 50
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10
+          }
+        },
+        "description": "At least one of query, state, or latitude+longitude is required."
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "enum": [
+              "ridb",
+              "fixture"
+            ]
+          },
+          "query": {
+            "type": "object"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "campgrounds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "campgroundId": {
+                  "type": "string",
+                  "description": "recreation.gov facility id — pass to GET /availability/:campgroundId"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "agency": {
+                  "type": "string"
+                },
+                "parkName": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "latitude": {
+                  "type": "number"
+                },
+                "longitude": {
+                  "type": "number"
+                },
+                "totalSites": {
+                  "type": "integer"
+                },
+                "reservable": {
+                  "type": "boolean"
+                },
+                "amenities": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "feePerNightUsd": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "null from RIDB, which does not publish a single nightly fee on the facility record"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "reservationUrl": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "campgroundId",
+                "name"
+              ]
+            }
+          },
+          "note": {
+            "type": "string"
+          },
+          "retrievedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "source",
+          "campgrounds",
+          "retrievedAt"
+        ]
+      }
+    },
+    {
+      "resource": "GET /availability/:campgroundId",
+      "description": "Site-level availability for a campground over a date window, plus a summary of what is bookable",
+      "price": "$0.003",
+      "asset": "USDC",
+      "network": "base-sepolia",
+      "networks": [
+        "base-sepolia",
+        "solana"
+      ],
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "base-sepolia",
+          "asset": "USDC",
+          "payTo": "0x40252CFDF8B20Ed757D61ff157719F33Ec332402",
+          "maxAmountRequired": "3000",
+          "mimeType": "application/json"
+        },
+        {
+          "scheme": "exact",
+          "network": "solana",
+          "asset": "USDC",
+          "payTo": "WwwuGbqHrwF5RG89KhUbmRWEvjnRH9k5kVM5p7T3WwW",
+          "maxAmountRequired": "3000",
+          "mimeType": "application/json"
+        }
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "campgroundId": {
+            "type": "string",
+            "description": "Numeric recreation.gov facility id, e.g. 232486"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Defaults to today"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Defaults to startDate + 3; max 31 nights"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300,
+            "default": 50
+          }
+        },
+        "required": [
+          "campgroundId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "enum": [
+              "ridb",
+              "fixture"
+            ],
+            "description": "Where the campground METADATA came from"
+          },
+          "availabilitySource": {
+            "enum": [
+              "recreation.gov",
+              "fixture"
+            ],
+            "description": "Where the AVAILABILITY came from. Read this one before trusting the numbers."
+          },
+          "campgroundId": {
+            "type": "string"
+          },
+          "campground": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "campgroundId": {
+                    "type": "string",
+                    "description": "recreation.gov facility id — pass to GET /availability/:campgroundId"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "agency": {
+                    "type": "string"
+                  },
+                  "parkName": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "latitude": {
+                    "type": "number"
+                  },
+                  "longitude": {
+                    "type": "number"
+                  },
+                  "totalSites": {
+                    "type": "integer"
+                  },
+                  "reservable": {
+                    "type": "boolean"
+                  },
+                  "amenities": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "feePerNightUsd": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "null from RIDB, which does not publish a single nightly fee on the facility record"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "reservationUrl": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "campgroundId",
+                  "name"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "window": {
+            "type": "object",
+            "properties": {
+              "startDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "nights": {
+                "type": "integer"
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalSites": {
+                "type": "integer"
+              },
+              "sitesWithAnyAvailability": {
+                "type": "integer"
+              },
+              "sitesAvailableWholeWindow": {
+                "type": "integer"
+              },
+              "firstFullyAvailableDate": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              }
+            }
+          },
+          "sites": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "campsiteId": {
+                  "type": "string"
+                },
+                "site": {
+                  "type": "string"
+                },
+                "loop": {
+                  "type": "string"
+                },
+                "siteType": {
+                  "type": "string"
+                },
+                "reserveType": {
+                  "type": "string"
+                },
+                "nightsAvailable": {
+                  "type": "integer"
+                },
+                "fullWindowAvailable": {
+                  "type": "boolean"
+                },
+                "days": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "date": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "status": {
+                        "enum": [
+                          "available",
+                          "reserved",
+                          "not-available",
+                          "not-reservable",
+                          "unknown"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "required": [
+                "campsiteId",
+                "days",
+                "nightsAvailable",
+                "fullWindowAvailable"
+              ]
+            }
+          },
+          "bookingUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "note": {
+            "type": "string"
+          },
+          "retrievedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "availabilitySource",
+          "summary",
+          "sites",
+          "bookingUrl",
+          "retrievedAt"
+        ]
+      }
+    }
+  ]
+}

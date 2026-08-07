@@ -1,0 +1,739 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "x402-campsites",
+    "version": "0.1.0",
+    "description": "Campground search and site-level availability from Recreation.gov, priced per lookup. Paid routes use the x402 protocol: pay in USDC on Base or Solana, your client picks the rail. Search uses RIDB (free key, deterministic fixture fallback labelled source:\"fixture\"); availability uses the public keyless recreation.gov endpoint and is called live.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "contact": {
+      "name": "nirholas",
+      "email": "nichxbt@gmail.com",
+      "url": "https://github.com/nirholas/x402-campsites"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4025",
+      "description": "Local development"
+    }
+  ],
+  "paths": {
+    "/search": {
+      "get": {
+        "summary": "Campground search (x402 paid, $0.002)",
+        "operationId": "searchCampgrounds",
+        "description": "At least one of query, state, or latitude+longitude is required.",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Yosemite"
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{2}$"
+            },
+            "example": "CA"
+          },
+          {
+            "name": "latitude",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "example": 37.86
+          },
+          {
+            "name": "longitude",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number"
+            },
+            "example": -119.53
+          },
+          {
+            "name": "radiusMiles",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching campgrounds",
+            "headers": {
+              "X-PAYMENT-RESPONSE": {
+                "description": "Base64 JSON settlement receipt: { success, rail: \"evm\"|\"solana\", network, transaction, payer }",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No search criteria given, or malformed state/coordinates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "502": {
+            "description": "RIDB upstream error (live mode only)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/availability/{campgroundId}": {
+      "get": {
+        "summary": "Site-level availability over a date window (x402 paid, $0.003)",
+        "operationId": "availability",
+        "description": "Calls the public keyless recreation.gov availability endpoint live. Read `availabilitySource` before trusting the numbers: \"recreation.gov\" is real, \"fixture\" means that endpoint was unreachable and the figures are a deterministic simulation.",
+        "parameters": [
+          {
+            "name": "campgroundId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+$"
+            },
+            "example": "232486",
+            "description": "Numeric recreation.gov facility id"
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2026-11-10",
+            "description": "Defaults to today"
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2026-11-13",
+            "description": "Defaults to startDate + 3; max 31 nights"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 300,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Availability, sites with the whole window free listed first",
+            "headers": {
+              "X-PAYMENT-RESPONSE": {
+                "description": "Base64 JSON settlement receipt: { success, rail: \"evm\"|\"solana\", network, transaction, payer }",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailabilityResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Non-numeric campgroundId, endDate not after startDate, or window over 31 nights",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "502": {
+            "description": "Upstream error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Service status and data sources (free)",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "service": {
+                      "type": "string"
+                    },
+                    "searchSource": {
+                      "enum": [
+                        "ridb",
+                        "fixture"
+                      ]
+                    },
+                    "availabilitySource": {
+                      "type": "string"
+                    },
+                    "rails": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/catalog": {
+      "get": {
+        "summary": "Real campground ids to try (free)",
+        "operationId": "catalog",
+        "description": "The fixture catalog ids. They are real recreation.gov facility ids, so availability lookups on them return live data without paying for a search first.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "note": {
+                      "type": "string"
+                    },
+                    "searchSource": {
+                      "type": "string"
+                    },
+                    "campgrounds": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "campgroundId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "parkName": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string"
+                          },
+                          "totalSites": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/x402": {
+      "get": {
+        "summary": "x402 discovery manifest (free)",
+        "operationId": "manifest",
+        "responses": {
+          "200": {
+            "description": "Discovery manifest listing every paid resource on both rails",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PaymentRequirements": {
+        "type": "object",
+        "description": "x402 payment requirements — one accepted payment option (one rail). A 402 lists one of these per rail: USDC on Base and USDC on Solana.",
+        "properties": {
+          "scheme": {
+            "type": "string",
+            "enum": [
+              "exact"
+            ]
+          },
+          "network": {
+            "type": "string",
+            "enum": [
+              "base-sepolia",
+              "base",
+              "solana",
+              "solana-devnet"
+            ],
+            "description": "EVM rail: base-sepolia | base. Solana rail: solana | solana-devnet."
+          },
+          "maxAmountRequired": {
+            "type": "string",
+            "description": "Atomic USDC units (6 decimals)"
+          },
+          "resource": {
+            "type": "string",
+            "format": "uri"
+          },
+          "description": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "payTo": {
+            "type": "string",
+            "description": "0x… on the EVM rail, base58 on the Solana rail"
+          },
+          "maxTimeoutSeconds": {
+            "type": "integer"
+          },
+          "asset": {
+            "type": "string",
+            "description": "USDC contract address (EVM) or SPL mint (Solana)"
+          },
+          "outputSchema": {
+            "type": "object"
+          },
+          "extra": {
+            "type": "object",
+            "description": "EVM: the token EIP-712 domain. Solana: mint name/decimals plus the optional facilitator feePayer."
+          }
+        },
+        "required": [
+          "scheme",
+          "network",
+          "maxAmountRequired",
+          "resource",
+          "payTo",
+          "asset"
+        ]
+      },
+      "Campground": {
+        "type": "object",
+        "properties": {
+          "campgroundId": {
+            "type": "string",
+            "description": "recreation.gov facility id — pass to GET /availability/:campgroundId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "agency": {
+            "type": "string"
+          },
+          "parkName": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "totalSites": {
+            "type": "integer"
+          },
+          "reservable": {
+            "type": "boolean"
+          },
+          "amenities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "feePerNightUsd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "null from RIDB, which does not publish a single nightly fee on the facility record"
+          },
+          "description": {
+            "type": "string"
+          },
+          "reservationUrl": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "campgroundId",
+          "name"
+        ]
+      },
+      "SiteAvailability": {
+        "type": "object",
+        "properties": {
+          "campsiteId": {
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          },
+          "loop": {
+            "type": "string"
+          },
+          "siteType": {
+            "type": "string"
+          },
+          "reserveType": {
+            "type": "string"
+          },
+          "nightsAvailable": {
+            "type": "integer"
+          },
+          "fullWindowAvailable": {
+            "type": "boolean"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "status": {
+                  "enum": [
+                    "available",
+                    "reserved",
+                    "not-available",
+                    "not-reservable",
+                    "unknown"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "campsiteId",
+          "days",
+          "nightsAvailable",
+          "fullWindowAvailable"
+        ]
+      },
+      "SearchResult": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "enum": [
+              "ridb",
+              "fixture"
+            ]
+          },
+          "query": {
+            "type": "object"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "campgrounds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Campground"
+            }
+          },
+          "note": {
+            "type": "string"
+          },
+          "retrievedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "source",
+          "campgrounds",
+          "retrievedAt"
+        ]
+      },
+      "AvailabilityResult": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "enum": [
+              "ridb",
+              "fixture"
+            ],
+            "description": "Where the campground METADATA came from"
+          },
+          "availabilitySource": {
+            "enum": [
+              "recreation.gov",
+              "fixture"
+            ],
+            "description": "Where the AVAILABILITY came from. Read this one before trusting the numbers."
+          },
+          "campgroundId": {
+            "type": "string"
+          },
+          "campground": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Campground"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "window": {
+            "type": "object",
+            "properties": {
+              "startDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "nights": {
+                "type": "integer"
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalSites": {
+                "type": "integer"
+              },
+              "sitesWithAnyAvailability": {
+                "type": "integer"
+              },
+              "sitesAvailableWholeWindow": {
+                "type": "integer"
+              },
+              "firstFullyAvailableDate": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              }
+            }
+          },
+          "sites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteAvailability"
+            }
+          },
+          "bookingUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "note": {
+            "type": "string"
+          },
+          "retrievedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "availabilitySource",
+          "summary",
+          "sites",
+          "bookingUrl",
+          "retrievedAt"
+        ]
+      }
+    },
+    "responses": {
+      "PaymentRequired": {
+        "description": "Payment required — pay via x402 on either rail and retry with the X-PAYMENT header. `accepts` holds one entry per rail.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "x402Version": {
+                  "type": "integer"
+                },
+                "error": {
+                  "type": "string"
+                },
+                "accepts": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentRequirements"
+                  }
+                }
+              }
+            },
+            "example": {
+              "x402Version": 1,
+              "error": "X-PAYMENT header required — pay in USDC on Base or Solana, your pick.",
+              "accepts": [
+                {
+                  "scheme": "exact",
+                  "network": "base-sepolia",
+                  "maxAmountRequired": "2000",
+                  "resource": "http://localhost:4025/search",
+                  "description": "Campground search — location, agency, site count, amenities, and booking link",
+                  "mimeType": "application/json",
+                  "payTo": "0x40252CFDF8B20Ed757D61ff157719F33Ec332402",
+                  "maxTimeoutSeconds": 60,
+                  "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+                  "extra": {
+                    "name": "USDC",
+                    "version": "2"
+                  }
+                },
+                {
+                  "scheme": "exact",
+                  "network": "solana",
+                  "maxAmountRequired": "2000",
+                  "resource": "http://localhost:4025/search",
+                  "description": "Campground search — location, agency, site count, amenities, and booking link",
+                  "mimeType": "application/json",
+                  "payTo": "WwwuGbqHrwF5RG89KhUbmRWEvjnRH9k5kVM5p7T3WwW",
+                  "maxTimeoutSeconds": 60,
+                  "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                  "extra": {
+                    "name": "USDC",
+                    "decimals": 6
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
