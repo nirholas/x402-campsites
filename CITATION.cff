@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+title: "x402-campsites"
+abstract: "Campground search and availability from the official Recreation.gov RIDB API, per-lookup pricing"
+license: Apache-2.0
+repository-code: "https://github.com/nirholas/x402-campsites"
+url: "https://three.ws"
+authors:
+  - name: three.ws
+    website: "https://three.ws"
