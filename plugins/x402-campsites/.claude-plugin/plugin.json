@@ -1,0 +1,18 @@
+{
+  "name": "x402-campsites",
+  "version": "0.1.0",
+  "description": "Self-hosted campground search and site availability from Recreation.gov, priced per lookup over x402.",
+  "author": {
+    "name": "nirholas"
+  },
+  "repository": "https://github.com/nirholas/x402-campsites",
+  "homepage": "https://nirholas.github.io/x402-campsites/",
+  "license": "Apache-2.0",
+  "keywords": [
+    "x402",
+    "camping",
+    "recreation-gov",
+    "travel",
+    "agents"
+  ]
+}

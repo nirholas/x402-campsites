@@ -1,0 +1,22 @@
+{
+  "name": "x402-campsites",
+  "owner": {
+    "name": "nirholas"
+  },
+  "description": "Self-hosted campground search and site availability from Recreation.gov, priced per lookup over x402.",
+  "plugins": [
+    {
+      "name": "x402-campsites",
+      "source": "./plugins/x402-campsites",
+      "description": "Self-hosted campground search and site availability from Recreation.gov, priced per lookup over x402.",
+      "category": "data",
+      "tags": [
+        "x402",
+        "camping",
+        "recreation-gov",
+        "travel",
+        "agents"
+      ]
+    }
+  ]
+}
